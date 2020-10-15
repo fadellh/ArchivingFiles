@@ -1,28 +1,39 @@
-﻿using System;
+﻿using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 
 namespace ArchivingFiles
 {
-    public class ManageFolder
+    public class ManageFolder : IManageFolder
     {
-        public List<string> defaults { get; set; }
-        public ManageFolder()
-        {
-            this.defaults = new List<string>();
-        }
-        //  List<string> defaults = new List<string>(new string[] { });
+        private List<string> defaults { get; set; }
+        private readonly ILogger<ManageFolder> _logger;
+        private readonly AppSetting _appSetting;
 
-        public List<string> ViewDefaultFolder(string currentFolder, int layer)
+        public ManageFolder( ILogger<ManageFolder> logger, IOptions<AppSetting> appSetting)
         {
-            var dirName = "";
-            string dateFormat = "yyyyMMdd";
-            string strBaseDirPath = currentFolder;
-            var existDir = Directory.GetDirectories(strBaseDirPath);
-            DirectoryInfo baseDir = new DirectoryInfo(strBaseDirPath);
-            int inputLayer = layer;
-            inputLayer--;
+            _logger = logger;
+            defaults = new List<string>();
+            _appSetting = appSetting.Value;
+
+        }
+
+        public List<string> ScanDefaultFolder(string currentFolder, int inputLayer, int layer)
+        {
+            /*
+             
+            Will be scanning not deleted folder based on folder layer from path C:\TestAja\ . 
+            Example string currentFolder: C:\TestAja\ have 2 layer. If inputLayer: 2 (no output) . 
+            C:\TestAja\Output have 3 layer. If inputLayer 3 -> Ouput All folderPath in C:\TestAja\
+            
+            */
+            _logger.LogInformation(_appSetting.UnitName);
+
+            var existDir = Directory.GetDirectories(currentFolder);
+            DirectoryInfo baseDir = new DirectoryInfo(currentFolder);
 
             if (existDir.Length > 0)
             {
@@ -30,84 +41,70 @@ namespace ArchivingFiles
 
                 foreach (var folder in subDirectories)
                 {
-                    DateTime dtName;
-                    dirName = folder.Name.Trim();
-                    // Console.WriteLine(dirName);
-                    Console.WriteLine(folder.FullName);
-                    defaults.Add(folder.FullName);
-
-                    if (inputLayer > 0)
+                    if (inputLayer > layer)
                     {
-                        ViewDefaultFolder(folder.FullName, inputLayer);
+                       _logger.LogInformation(folder.FullName);
+                        // Console.WriteLine(folder.FullName);
+                        defaults.Add(folder.FullName);
+                        ScanDefaultFolder(folder.FullName, inputLayer - 1, layer);
                     }
                 }
             }
             var result = defaults;
             return result;
         }
-
-        public bool EraseDirectory(string folderPath, List<string> defaultFolder)
+        public int SplitDir(string path)
         {
-           // bool recursive = false;
-            //Safety check for directory existence.
+            string[] splitDir = path.Split("\\");
+            return splitDir.Length;
+        }
+        public void DeleteFiles(string filePath, int time)
+        {
+            string[] files = Directory.GetFiles(filePath);
 
-            if (!Directory.Exists(folderPath))
-                return false;
-
-            foreach (string file in Directory.GetFiles(folderPath))
+            foreach (string file in files)
             {
-                Console.WriteLine("Delete file {0}", file);
-                // File.Delete(file);
-            }
+                FileInfo fi = new FileInfo(file);
 
-            //Console.WriteLine(recursive);
-            if (FilterCollection(folderPath, defaultFolder))
-            {
-                Console.WriteLine("MASUK RECURSIVE");
-                // recursive = true;
-                // if (recursive)
+                Console.WriteLine(DateTime.Now.AddDays(-time));
+
+                if (fi.LastAccessTime < DateTime.Now.AddDays(-time))
                 {
-                    foreach (string dir in Directory.GetDirectories(folderPath))
+                    _logger.LogInformation("Delete file {0}", fi.FullName);
+                   // Console.WriteLine("Delete file {0}", fi.FullName);
+                     //fi.Delete();
+                }
+            }
+        }
+        public void DeleteFolders (string filePath, int time, int layer)
+        {
+            var dirName = "";
+            string[] splitDir = filePath.Split("\\");
+
+            foreach (var list in splitDir)
+            {
+                // Console.WriteLine(list);
+                //expected output [C:,TestAja,Output,AdmissionNo]
+            }
+            //if dir in the 4th layer. Delete all file and folder in that directory(example: C:\TestAja\Output\AdmissionNo)
+            if (splitDir.Length > layer-1)
+            {
+                DirectoryInfo baseDir = new DirectoryInfo(filePath);
+                DirectoryInfo[] subDirectories = baseDir.GetDirectories();
+
+                foreach (var folder in subDirectories)
+                {
+                    dirName = folder.Name.Trim();
+                    if (folder.CreationTime < DateTime.Now.AddDays(-time))
                     {
-                        EraseDirectory(dir, defaultFolder);
+                        _logger.LogInformation("Delete Folder {0}", dirName);
+                      //  Console.WriteLine("Delete Folder {0}", dirName);
+                    // folder.Delete(true);
                     }
-                }
-                Console.WriteLine("Delete Directory {0}", folderPath);
-                //Directory.Delete(folderPath);
-            }
 
-
-            //if input == string list folder yang jangan di delete return recursive false --Jadi 
-            // Dia ga akan recursive lagi
-            //Iterate to sub directory only if required.
-            //Delete the parent directory before leaving
-            return true;
-        }
-
-        public static bool FilterCollection(string path, List<string> collection)
-        {
-            bool same = false;
-            foreach (var item in collection)
-            {
-
-                if (path == item)
-                {
-                 Console.WriteLine("{0} SAMA DENGAN {1}", path, path);
-                    same = true;
                 }
             }
-            // return true;
-            if (same)
-            {
-                return false;
-            }
-            else 
-            {
-                Console.WriteLine("{0} TIDAK SAMA Item di Folder Collection", path);
-                return true;
-            }
-            // return false;
-        }
 
+        }
     }
 }
